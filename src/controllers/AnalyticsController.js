@@ -1,4 +1,4 @@
-const prisma = require("../config/database");
+const prisma = require('../config/database');
 
 class AnalyticsController {
   async getProductAnalytics() {
@@ -18,7 +18,7 @@ class AnalyticsController {
       },
       orderBy: {
         variants: {
-          _count: "desc",
+          _count: 'desc',
         },
       },
       take: 10,
@@ -27,15 +27,15 @@ class AnalyticsController {
     return topProducts.map((product) => {
       const totalQuantitySold = product.orderLineItems.reduce(
         (sum, item) => sum + item.quantity,
-        0
+        0,
       );
       const totalRevenue = product.orderLineItems.reduce(
         (sum, item) => sum + item.quantity * item.price.toNumber(),
-        0
+        0,
       );
       const variantsSold = product.variants.reduce(
         (sum, variant) => sum + variant.soldNumber,
-        0
+        0,
       );
 
       return {
@@ -63,7 +63,7 @@ class AnalyticsController {
       },
       orderBy: {
         orders: {
-          _count: "desc",
+          _count: 'desc',
         },
       },
       take: 10,
@@ -73,16 +73,16 @@ class AnalyticsController {
       const totalOrders = customer.orders.length;
       const totalSpent = customer.orders.reduce(
         (sum, order) => sum + order.revenue.toNumber(),
-        0
+        0,
       );
       const averageOrderValue = totalOrders > 0 ? totalSpent / totalOrders : 0;
       const lastOrderDate =
         customer.orders.length > 0
           ? Math.max(
-              ...customer.orders.map((order) =>
-                new Date(order.createdAt).getTime()
-              )
-            )
+            ...customer.orders.map((order) =>
+              new Date(order.createdAt).getTime(),
+            ),
+          )
           : null;
 
       return {

@@ -1,10 +1,10 @@
-const prisma = require("../config/database");
-const { calculatePaymentFee } = require("../utils/payment");
+const prisma = require('../config/database');
+const { calculatePaymentFee } = require('../utils/payment');
 
 class OrderController {
   async processShopifyOrder(orderData) {
     try {
-      console.log("Processing order:", orderData.id);
+      console.log('Processing order:', orderData.id);
 
       // Use Prisma transaction to ensure data consistency
       await prisma.$transaction(async (tx) => {
@@ -21,31 +21,33 @@ class OrderController {
         await this.processPaymentGateway(tx, orderData, order.id);
       });
 
-      console.log("Order processed successfully:", orderData.id);
+      console.log('Order processed successfully:', orderData.id);
       return { success: true };
     } catch (error) {
-      console.error("Error processing order:", error);
+      console.error('Error processing order:', error);
       throw error;
     }
   }
 
   async upsertCustomer(tx, orderData) {
-    if (!orderData.customer) return null;
+    if (!orderData.customer) {
+      return null;
+    }
 
     return await tx.customer.upsert({
       where: { id: orderData.customer.id.toString() },
       update: {
         email: orderData.customer.email,
-        fullname: `${orderData.customer.first_name || ""} ${
-          orderData.customer.last_name || ""
+        fullname: `${orderData.customer.first_name || ''} ${
+          orderData.customer.last_name || ''
         }`.trim(),
         country: orderData.shipping_address?.country_code,
       },
       create: {
         id: orderData.customer.id.toString(),
         email: orderData.customer.email,
-        fullname: `${orderData.customer.first_name || ""} ${
-          orderData.customer.last_name || ""
+        fullname: `${orderData.customer.first_name || ''} ${
+          orderData.customer.last_name || ''
         }`.trim(),
         country: orderData.shipping_address?.country_code,
       },
@@ -59,7 +61,7 @@ class OrderController {
         orderId: orderData.order_number?.toString() || orderData.id.toString(),
         customerId: customerId,
         shipCountry: orderData.shipping_address?.country_code,
-        revenue: parseFloat(orderData.total_price || "0"),
+        revenue: parseFloat(orderData.total_price || '0'),
         paygateName: orderData.gateway || orderData.payment_gateway_names?.[0],
         createdAt: new Date(orderData.created_at),
         cost: 0, // Will be calculated based on line items
@@ -69,7 +71,7 @@ class OrderController {
         orderId: orderData.order_number?.toString() || orderData.id.toString(),
         customerId: customerId,
         shipCountry: orderData.shipping_address?.country_code,
-        revenue: parseFloat(orderData.total_price || "0"),
+        revenue: parseFloat(orderData.total_price || '0'),
         paygateName: orderData.gateway || orderData.payment_gateway_names?.[0],
         createdAt: new Date(orderData.created_at),
         cost: 0,
@@ -85,14 +87,14 @@ class OrderController {
         update: {
           title: lineItem.title,
           body: lineItem.name,
-          productType: lineItem.product_type || "unknown",
+          productType: lineItem.product_type || 'unknown',
           updatedAt: new Date(),
         },
         create: {
           id: lineItem.product_id.toString(),
           title: lineItem.title,
           body: lineItem.name,
-          productType: lineItem.product_type || "unknown",
+          productType: lineItem.product_type || 'unknown',
           updatedAt: new Date(),
         },
       });
@@ -107,10 +109,10 @@ class OrderController {
           create: {
             id: lineItem.variant_id.toString(),
             productId: lineItem.product_id.toString(),
-            size: lineItem.variant_title?.includes("Size")
+            size: lineItem.variant_title?.includes('Size')
               ? lineItem.variant_title
               : null,
-            color: lineItem.variant_title?.includes("Color")
+            color: lineItem.variant_title?.includes('Color')
               ? lineItem.variant_title
               : null,
             soldNumber: lineItem.quantity,
@@ -125,11 +127,11 @@ class OrderController {
           itemId: lineItem.product_id.toString(),
           sku: lineItem.sku,
           quantity: lineItem.quantity,
-          price: parseFloat(lineItem.price || "0"),
+          price: parseFloat(lineItem.price || '0'),
           name: lineItem.name,
           title: lineItem.title,
           giftCard: lineItem.gift_card || false,
-          totalDiscount: parseFloat(lineItem.total_discount || "0"),
+          totalDiscount: parseFloat(lineItem.total_discount || '0'),
           vendorName: lineItem.vendor,
         },
       });
@@ -146,7 +148,7 @@ class OrderController {
           name: gatewayName,
           fee: calculatePaymentFee(
             gatewayName,
-            parseFloat(orderData.total_price || "0")
+            parseFloat(orderData.total_price || '0'),
           ),
         },
         create: {
@@ -154,7 +156,7 @@ class OrderController {
           name: gatewayName,
           fee: calculatePaymentFee(
             gatewayName,
-            parseFloat(orderData.total_price || "0")
+            parseFloat(orderData.total_price || '0'),
           ),
         },
       });
@@ -191,7 +193,7 @@ class OrderController {
     const orders = await prisma.order.findMany({
       skip,
       take: limit,
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
       include: {
         customer: true,
         orderLineItems: {

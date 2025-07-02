@@ -1,4 +1,4 @@
-const prisma = require("../config/database");
+const prisma = require('../config/database');
 
 class StatsController {
   async updateOrderStats(orderData) {
@@ -7,7 +7,7 @@ class StatsController {
       const dateOnly = new Date(
         orderDate.getFullYear(),
         orderDate.getMonth(),
-        orderDate.getDate()
+        orderDate.getDate(),
       );
       const revenue = parseFloat(orderData.total_price);
 
@@ -39,7 +39,7 @@ class StatsController {
         });
       }
     } catch (error) {
-      console.error("Error updating order stats:", error);
+      console.error('Error updating order stats:', error);
     }
   }
 
@@ -54,7 +54,7 @@ class StatsController {
 
     return await prisma.orderStats.findMany({
       where: whereClause,
-      orderBy: { date: "desc" },
+      orderBy: { date: 'desc' },
       take: 30, // Last 30 days by default
     });
   }
@@ -74,7 +74,7 @@ class StatsController {
 
     // Get recent orders
     const recentOrders = await prisma.order.findMany({
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
       take: 10,
       select: {
         id: true,

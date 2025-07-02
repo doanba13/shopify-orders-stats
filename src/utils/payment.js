@@ -1,4 +1,4 @@
-const { PAYMENT_FEE_RATES, DEFAULT_FEE_RATE } = require("../config/constants");
+const { PAYMENT_FEE_RATES, DEFAULT_FEE_RATE } = require('../config/constants');
 
 function calculatePaymentFee(gatewayName, orderTotal) {
   const rate = PAYMENT_FEE_RATES[gatewayName.toLowerCase()] || DEFAULT_FEE_RATE;
