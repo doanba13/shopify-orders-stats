@@ -2,9 +2,9 @@ const prisma = require('../config/database');
 const { calculatePaymentFee } = require('../utils/payment');
 
 class OrderController {
-  async processShopifyOrder(orderData) {
+  async processShopifyOrder(orderData, app) {
     try {
-      console.log('Processing order:', orderData.id);
+      // console.log('Processing order:', orderData.id);
 
       // Use Prisma transaction to ensure data consistency
       await prisma.$transaction(async (tx) => {
@@ -12,7 +12,7 @@ class OrderController {
         const customer = await this.upsertCustomer(tx, orderData);
 
         // 2. Create/update order
-        const order = await this.upsertOrder(tx, orderData, customer?.id);
+        const order = await this.upsertOrder(tx, orderData, customer?.id, app);
 
         // 3. Process line items
         await this.processLineItems(tx, orderData, order.id);
@@ -21,7 +21,7 @@ class OrderController {
         await this.processPaymentGateway(tx, orderData, order.id);
       });
 
-      console.log('Order processed successfully:', orderData.id);
+      // console.log('Order processed successfully:', orderData.id);
       return { success: true };
     } catch (error) {
       console.error('Error processing order:', error);
@@ -34,27 +34,29 @@ class OrderController {
       return null;
     }
 
+    const customer = orderData.customer;
+
     return await tx.customer.upsert({
-      where: { id: orderData.customer.id.toString() },
+      where: { id: customer.id.toString() },
       update: {
-        email: orderData.customer.email,
-        fullname: `${orderData.customer.first_name || ''} ${
-          orderData.customer.last_name || ''
+        email: customer.email,
+        fullname: `${customer.first_name || ''} ${
+          customer.last_name || ''
         }`.trim(),
         country: orderData.shipping_address?.country_code,
       },
       create: {
-        id: orderData.customer.id.toString(),
-        email: orderData.customer.email,
-        fullname: `${orderData.customer.first_name || ''} ${
-          orderData.customer.last_name || ''
+        id: customer.id.toString(),
+        email: customer.email,
+        fullname: `${customer.first_name || ''} ${
+          customer.last_name || ''
         }`.trim(),
         country: orderData.shipping_address?.country_code,
       },
     });
   }
 
-  async upsertOrder(tx, orderData, customerId) {
+  async upsertOrder(tx, orderData, customerId, app) {
     return await tx.order.upsert({
       where: { id: orderData.id.toString() },
       update: {
@@ -65,6 +67,7 @@ class OrderController {
         paygateName: orderData.gateway || orderData.payment_gateway_names?.[0],
         createdAt: new Date(orderData.created_at),
         cost: 0, // Will be calculated based on line items
+        app: app,
       },
       create: {
         id: orderData.id.toString(),
@@ -75,46 +78,53 @@ class OrderController {
         paygateName: orderData.gateway || orderData.payment_gateway_names?.[0],
         createdAt: new Date(orderData.created_at),
         cost: 0,
+        app: app,
       },
     });
   }
 
   async processLineItems(tx, orderData, orderId) {
     for (const lineItem of orderData.line_items || []) {
+      if (!lineItem.product_id) {
+        continue;
+      }
+
+      const productType =
+        lineItem.variant_title?.split('/')?.[0]?.trim() || 'unknown';
       // Upsert product
       await tx.product.upsert({
         where: { id: lineItem.product_id.toString() },
         update: {
           title: lineItem.title,
           body: lineItem.name,
-          productType: lineItem.product_type || 'unknown',
+          productType,
           updatedAt: new Date(),
         },
         create: {
           id: lineItem.product_id.toString(),
           title: lineItem.title,
           body: lineItem.name,
-          productType: lineItem.product_type || 'unknown',
+          productType,
           updatedAt: new Date(),
         },
       });
 
       // Upsert product variant if variant_id exists
       if (lineItem.variant_id) {
+        const size = lineItem.variant_title?.split('/')?.reverse()?.[0]?.trim();
+        if (!size) {
+          return;
+        }
+
         await tx.productVariant.upsert({
-          where: { id: lineItem.variant_id.toString() },
+          where: { id: lineItem.variant_id.toString(), size },
           update: {
             soldNumber: { increment: lineItem.quantity },
           },
           create: {
             id: lineItem.variant_id.toString(),
             productId: lineItem.product_id.toString(),
-            size: lineItem.variant_title?.includes('Size')
-              ? lineItem.variant_title
-              : null,
-            color: lineItem.variant_title?.includes('Color')
-              ? lineItem.variant_title
-              : null,
+            size,
             soldNumber: lineItem.quantity,
           },
         });

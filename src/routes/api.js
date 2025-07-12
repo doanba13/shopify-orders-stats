@@ -1,8 +1,10 @@
+/* eslint-disable no-unused-vars */
 const express = require('express');
 const router = express.Router();
 const OrderController = require('../controllers/OrderController');
 const StatsController = require('../controllers/StatsController');
 const AnalyticsController = require('../controllers/AnalyticsController');
+const shopifyRepos = require('../config/shopify');
 
 // Statistics endpoints
 router.get('/stats/daily', async (req, res) => {
@@ -13,6 +15,31 @@ router.get('/stats/daily', async (req, res) => {
   } catch (error) {
     console.error('Error fetching daily stats:', error);
     res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// Statistics endpoints
+router.get('/do-some-shyt', async (req, res) => {
+  try {
+    const promises = shopifyRepos.map(async (repo) => {
+      const orders = await repo.getOrders(4);
+
+      for (const order of orders || []) {
+        await OrderController.processShopifyOrder(order);
+
+        // await StatsController.updateOrderStats(order);
+      }
+    });
+
+    await Promise.all(promises);
+
+    res.json({
+      success: true,
+    });
+  } catch (_) {
+    res.status(500).json({
+      success: false,
+    });
   }
 });
 

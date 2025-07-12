@@ -8,29 +8,31 @@ datasource db {
 }
 
 model Order {
-  id           String   @id
-  orderId      String   @map("order_id")
-  customerId   String?  @map("customer_id")
-  shipCountry  String?  @map("ship_country")
-  revenue      Decimal  @db.Decimal(10, 2)
-  paygateName  String?  @map("paygate_name")
-  createdAt    DateTime @map("created_at")
-  cost         Decimal? @db.Decimal(10, 2)
+  id          String   @id
+  orderId     String   @map("order_id")
+  customerId  String?  @map("customer_id")
+  shipCountry String?  @map("ship_country")
+  revenue     Decimal  @db.Decimal(10, 2)
+  paygateName String?  @map("paygate_name")
+  createdAt   DateTime @map("created_at")
+  cost        Decimal? @db.Decimal(10, 2)
 
   // Relations
-  customer      Customer?         @relation(fields: [customerId], references: [id])
+  customer       Customer?       @relation(fields: [customerId], references: [id])
   orderLineItems OrderLineItem[]
-  refund        Refund?
-  paygate       Paygate?
+  refund         Refund?
+  paygate        Paygate?
+  app         String
 
   @@map("orders")
 }
 
 model Customer {
-  id       String  @id
-  email    String?
-  fullname String?
-  country  String?
+  id              String  @id
+  email           String?
+  fullname        String?
+  country         String?
+  emailSubscribed Boolean @default(false) @map("email_subscribed")
 
   // Relations
   orders Order[]
@@ -48,7 +50,7 @@ model OrderLineItem {
   name          String?
   title         String?
   giftCard      Boolean @default(false) @map("gift_card")
-  totalDiscount Decimal @default(0) @db.Decimal(10, 2) @map("total_discount")
+  totalDiscount Decimal @default(0) @map("total_discount") @db.Decimal(10, 2)
   vendorName    String? @map("vendor_name")
 
   // Relations
@@ -59,10 +61,10 @@ model OrderLineItem {
 }
 
 model Product {
-  id          String @id
+  id          String   @id
   title       String
   body        String?
-  productType String @map("product_type")
+  productType String   @map("product_type")
   tag         String?
   updatedAt   DateTime @map("updated_at")
 
@@ -74,11 +76,10 @@ model Product {
 }
 
 model ProductVariant {
-  id         String @id
-  productId  String @map("product_id")
+  id         String  @id
+  productId  String  @map("product_id")
   size       String?
-  color      String?
-  soldNumber Int    @default(0) @map("sold_number")
+  soldNumber Int     @default(0) @map("sold_number")
 
   // Relations
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
@@ -88,11 +89,11 @@ model ProductVariant {
 }
 
 model Base {
-  id              String @id @default(cuid())
-  productVariantId String @map("product_variant_id")
-  sku             String @unique
-  country         String
-  baseCost        Decimal @db.Decimal(10, 2) @map("base_cost")
+  id               String  @id @default(cuid())
+  productVariantId String  @map("product_variant_id")
+  sku              String  @unique
+  country          String
+  baseCost         Decimal @map("base_cost") @db.Decimal(10, 2)
 
   // Relations
   productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
@@ -103,7 +104,7 @@ model Base {
 model Refund {
   id          String   @id
   orderId     String   @unique @map("order_id")
-  totalRefund Decimal  @db.Decimal(10, 2) @map("total_refund")
+  totalRefund Decimal  @map("total_refund") @db.Decimal(10, 2)
   createdAt   DateTime @map("created_at")
 
   // Relations
@@ -125,13 +126,13 @@ model Paygate {
 }
 
 model OrderStats {
-  id              Int      @id @default(autoincrement())
-  date            DateTime @unique
-  totalOrders     Int      @map("total_orders")
-  totalRevenue    Decimal  @map("total_revenue") @db.Decimal(10, 2)
-  averageOrderValue Decimal @map("average_order_value") @db.Decimal(10, 2)
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  id                Int      @id @default(autoincrement())
+  date              DateTime @unique
+  totalOrders       Int      @map("total_orders")
+  totalRevenue      Decimal  @map("total_revenue") @db.Decimal(10, 2)
+  averageOrderValue Decimal  @map("average_order_value") @db.Decimal(10, 2)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@map("order_stats")
 }
