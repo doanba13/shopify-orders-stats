@@ -22,16 +22,49 @@ router.get('/stats/daily', async (req, res) => {
 router.get('/do-some-shyt', async (req, res) => {
   try {
     const promises = shopifyRepos.map(async (repo) => {
-      const orders = await repo.getOrders(4);
+      const orders = await repo.getOrders(8);
 
       for (const order of orders || []) {
-        await OrderController.processShopifyOrder(order);
+        await OrderController.processShopifyOrder(order, repo.app);
 
         // await StatsController.updateOrderStats(order);
+        // await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     });
 
     await Promise.all(promises);
+
+    res.json({
+      success: true,
+    });
+  } catch (_) {
+    res.status(500).json({
+      success: false,
+    });
+  }
+});
+
+router.get('/do-some-shyt3', async (req, res) => {
+  try {
+    const promises = shopifyRepos.map(async (repo) => {
+      await repo.getOrderById();
+    });
+
+    await Promise.all(promises);
+
+    res.json({
+      success: true,
+    });
+  } catch (_) {
+    res.status(500).json({
+      success: false,
+    });
+  }
+});
+
+router.get('/do-some-shyt2', async (req, res) => {
+  try {
+    await OrderController.calculateContributeMargin();
 
     res.json({
       success: true,

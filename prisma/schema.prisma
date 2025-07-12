@@ -17,6 +17,12 @@ model Order {
   createdAt   DateTime @map("created_at")
   cost        Decimal? @db.Decimal(10, 2)
 
+  revenueUSD     Decimal  @db.Decimal(10, 2) @map("revenue_usd")
+  discount       Decimal  @db.Decimal(10, 2)
+  tax       Decimal  @db.Decimal(10, 2)
+  shipped       Decimal  @db.Decimal(10, 2)
+  subTotal       Decimal  @db.Decimal(10, 2) @map("sub_total")
+
   // Relations
   customer       Customer?       @relation(fields: [customerId], references: [id])
   orderLineItems OrderLineItem[]
@@ -83,20 +89,15 @@ model ProductVariant {
 
   // Relations
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  bases   Base[]
 
   @@map("product_variants")
 }
 
 model Base {
   id               String  @id @default(cuid())
-  productVariantId String  @map("product_variant_id")
   sku              String  @unique
   country          String
   baseCost         Decimal @map("base_cost") @db.Decimal(10, 2)
-
-  // Relations
-  productVariant ProductVariant @relation(fields: [productVariantId], references: [id], onDelete: Cascade)
 
   @@map("bases")
 }

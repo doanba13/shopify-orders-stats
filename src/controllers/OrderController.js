@@ -1,5 +1,14 @@
 const prisma = require('../config/database');
 const { calculatePaymentFee } = require('../utils/payment');
+const orderUtil = require('../utils/order');
+
+const shopify = require('../config/shopify');
+
+const getRepoByName = (app) => {
+  const idx = shopify.findIndex(e => e.app === app);
+
+  return shopify[idx];
+};
 
 class OrderController {
   async processShopifyOrder(orderData, app) {
@@ -12,10 +21,15 @@ class OrderController {
         const customer = await this.upsertCustomer(tx, orderData);
 
         // 2. Create/update order
-        const order = await this.upsertOrder(tx, orderData, customer?.id, app);
+        const order = await this.upsertOrder(
+          tx,
+          orderData,
+          customer?.id,
+          app,
+        );
 
         // 3. Process line items
-        await this.processLineItems(tx, orderData, order.id);
+        await this.processLineItems(tx, orderData, order.id, app);
 
         // 4. Handle payment gateway
         await this.processPaymentGateway(tx, orderData, order.id);
@@ -68,6 +82,12 @@ class OrderController {
         createdAt: new Date(orderData.created_at),
         cost: 0, // Will be calculated based on line items
         app: app,
+
+        revenueUSD: orderUtil.toUSD(orderData),
+        discount: orderUtil.getDiscount(orderData),
+        tax: orderUtil.getTax(orderData),
+        shipped: orderUtil.getShipping(orderData),
+        subTotal: orderUtil.getSubtotal(orderData),
       },
       create: {
         id: orderData.id.toString(),
@@ -79,11 +99,16 @@ class OrderController {
         createdAt: new Date(orderData.created_at),
         cost: 0,
         app: app,
+        revenueUSD: orderUtil.toUSD(orderData),
+        discount: orderUtil.getDiscount(orderData),
+        tax: orderUtil.getTax(orderData),
+        shipped: orderUtil.getShipping(orderData),
+        subTotal: orderUtil.getSubtotal(orderData),
       },
     });
   }
 
-  async processLineItems(tx, orderData, orderId) {
+  async processLineItems(tx, orderData, orderId, app) {
     for (const lineItem of orderData.line_items || []) {
       if (!lineItem.product_id) {
         continue;
@@ -128,23 +153,32 @@ class OrderController {
             soldNumber: lineItem.quantity,
           },
         });
-      }
 
-      // Create order line item
-      await tx.orderLineItem.create({
-        data: {
-          orderId: orderId,
-          itemId: lineItem.product_id.toString(),
-          sku: lineItem.sku,
-          quantity: lineItem.quantity,
-          price: parseFloat(lineItem.price || '0'),
-          name: lineItem.name,
-          title: lineItem.title,
-          giftCard: lineItem.gift_card || false,
-          totalDiscount: parseFloat(lineItem.total_discount || '0'),
-          vendorName: lineItem.vendor,
-        },
-      });
+        let sku = lineItem.sku;
+        if (!lineItem.sku || sku === 'PPF005') {
+          const repo = getRepoByName(app);
+          const vr = await repo.getVariantById(lineItem.variant_id);
+          sku = vr.sku;
+        }
+
+        // Create order line item
+        if (sku) {
+          await tx.orderLineItem.create({
+            data: {
+              orderId: orderId,
+              itemId: lineItem.product_id.toString(),
+              sku,
+              quantity: lineItem.quantity,
+              price: parseFloat(lineItem.price || '0'),
+              name: lineItem.name,
+              title: lineItem.title,
+              giftCard: lineItem.gift_card || false,
+              totalDiscount: parseFloat(lineItem.total_discount || '0'),
+              vendorName: lineItem.vendor,
+            },
+          });
+        }
+      }
     }
   }
 
@@ -229,6 +263,69 @@ class OrderController {
         hasPrevPage: page > 1,
       },
     };
+  }
+
+  async calculateContributeMargin() {
+    try {
+      const orders = await prisma.order.findMany({
+        where: {
+          id: {
+            in: ['6292249772163', '6292766392451'],
+          },
+        },
+        include: {
+          orderLineItems: true,
+        },
+      });
+
+      console.log(orders);
+
+      const countrySku = [];
+
+      for (const order of orders) {
+        const country = order.shipCountry;
+        for (const lineItem of order.orderLineItems) {
+          countrySku.push({ sku: lineItem.sku, country });
+        }
+      }
+
+      const bases = await prisma.base.findMany({
+        where: {
+          OR: countrySku,
+        },
+      });
+
+      const baseCost = {};
+      for (const bs of bases) {
+        baseCost[`${bs.sku}_${bs.country}`] = bs.baseCost;
+      }
+
+      console.log(baseCost);
+
+      let revenue = 0;
+      let spend = 0;
+      for (const {
+        orderLineItems: line,
+        shipCountry,
+        id,
+        revenueUSD,
+      } of orders) {
+        revenue += +revenueUSD;
+        for (const item of line) {
+          const itemsBase = baseCost[`${item.sku}_${shipCountry}`] ?? 18.99;
+          console.log(
+            `Order ${id} - Item ${item.sku} - Country ${shipCountry} - Quantity ${item.quantity} - Base ${itemsBase}`,
+          );
+
+          spend += itemsBase * item.quantity;
+        }
+      }
+      console.log('revenue', revenue);
+      console.log('spend', spend * 1.15);
+      console.log('net', (revenue = spend * 1.15));
+    } catch (error) {
+      console.error(error);
+    }
   }
 }
 

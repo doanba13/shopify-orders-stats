@@ -1,6 +1,8 @@
 /* eslint-disable no-unused-vars */
 const axios = require('axios');
 
+const variant = {};
+
 class ShopifyRepository {
   constructor(baseURL, secret, app) {
     this.app = app;
@@ -25,6 +27,7 @@ class ShopifyRepository {
   async getOrders(time = 1) {
     let pageInfo;
     const result = [];
+    const set = new Set();
 
     try {
       for (const t of Array(time)
@@ -45,7 +48,14 @@ class ShopifyRepository {
           ?.reverse()?.[0]
           .replace('>', '');
 
-        result.push(...(response.data?.orders || []));
+        for (const o of response.data?.orders || []) {
+          if (set.has(o.id)) {
+            continue;
+          }
+
+          set.add(o.id);
+          result.push(o);
+        }
       }
 
       this.logger('Total orders:', result.length);
@@ -56,6 +66,49 @@ class ShopifyRepository {
       this.error('We have error sir: ', error);
       this.handleError(error);
       throw error;
+    }
+  }
+
+  async getOrderById(id = '6281629171962') {
+    try {
+      const response = await this.shopifyAPI.get(`/orders/${id}.json`);
+
+      const response2 = await this.shopifyAPI.get(
+        '/products/8734241816826.json',
+      );
+
+      console.log(response.data.order);
+      console.log(response2.data.product.variants.length);
+      console.log(
+        response2.data.product.variants.filter(
+          (e) => e.id === '15188698333434' || e.id === 47160651481338,
+        ),
+      );
+      console.log(response2.data.product.variants[0]);
+    } catch (error) {
+      this.error('We have error sir: ', error);
+      this.handleError(error);
+      throw error;
+    }
+  }
+
+  async getVariantById(id) {
+    const _v = variant[id];
+    if(_v) {return _v;}
+
+    try {
+      const response = await this.shopifyAPI.get(
+        `/variants/${id}.json`,
+      );
+
+      this.logger('Need to get variant: ', id);
+
+      const v = response.data.variant;
+      variant[v.id] = v;
+      return v;
+    } catch (error) {
+      this.error('Get variant fail: ', id);
+      return null;
     }
   }
 
