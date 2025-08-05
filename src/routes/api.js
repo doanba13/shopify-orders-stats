@@ -64,10 +64,15 @@ router.get('/do-some-shyt3', async (req, res) => {
 
 router.get('/do-some-shyt2', async (req, res) => {
   try {
-    await OrderController.calculateContributeMargin();
-
+    const { result, orders } = await OrderController.calculateContributeMargin(
+      req.query.startDate,
+      req.query.endDate,
+      req.query.app,
+    );
     res.json({
       success: true,
+      data: result,
+      orders,
     });
   } catch (_) {
     res.status(500).json({

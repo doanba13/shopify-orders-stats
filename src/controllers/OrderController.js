@@ -1,11 +1,16 @@
 const prisma = require('../config/database');
+const facebook = require('../config/facebook');
 const { calculatePaymentFee } = require('../utils/payment');
 const orderUtil = require('../utils/order');
+const dayjs = require('dayjs');
+const utc = require('dayjs/plugin/utc');
+
+dayjs.extend(utc);
 
 const shopify = require('../config/shopify');
 
 const getRepoByName = (app) => {
-  const idx = shopify.findIndex(e => e.app === app);
+  const idx = shopify.findIndex((e) => e.app === app);
 
   return shopify[idx];
 };
@@ -21,12 +26,7 @@ class OrderController {
         const customer = await this.upsertCustomer(tx, orderData);
 
         // 2. Create/update order
-        const order = await this.upsertOrder(
-          tx,
-          orderData,
-          customer?.id,
-          app,
-        );
+        const order = await this.upsertOrder(tx, orderData, customer?.id, app);
 
         // 3. Process line items
         await this.processLineItems(tx, orderData, order.id, app);
@@ -265,23 +265,117 @@ class OrderController {
     };
   }
 
-  async calculateContributeMargin() {
+  // +1
+  generateParadisDate(startDate, endDate = null) {
+    const startUnix =
+      dayjs.unix(startDate).utc().startOf('day').unix() - 60 * 60;
+    const endUnix =
+      (endDate
+        ? dayjs.unix(endDate).utc().endOf('day').unix()
+        : dayjs.unix(startDate).utc().endOf('day').unix()) -
+      60 * 60;
+
+    const startDay = dayjs.unix(startUnix).utc();
+    const endDay = dayjs.unix(endUnix).utc();
+
+    console.log('hehe', startDay, endDay);
+
+    return { startDay, endDay };
+  }
+
+  // -8
+  generatePersoliebeDate(startDate, endDate = null) {
+    const startUnix =
+      dayjs.unix(startDate).utc().startOf('day').unix() + 8 * 60 * 60;
+    const endUnix =
+      (endDate
+        ? dayjs.unix(endDate).utc().endOf('day').unix()
+        : dayjs.unix(startDate).utc().endOf('day').unix()) +
+      8 * 60 * 60;
+
+    const startDay = dayjs.unix(startUnix).utc();
+    const endDay = dayjs.unix(endUnix).utc();
+
+    return { startDay, endDay };
+  }
+
+  generateAllDate(startDate, endDate) {
+    const startDay = dayjs.unix(startDate).utc().startOf('day');
+    const endDay = endDate
+      ? dayjs.unix(endDate).utc().endOf('day')
+      : dayjs.unix(startDate).utc().endOf('day');
+
+    return { startDay, endDay };
+  }
+
+  dateFactory(startDate, endDate = null, app) {
+    console.log('app', app);
+    switch (app) {
+    case 'Persoliebe':
+      return this.generatePersoliebeDate(startDate, endDate);
+    case 'Paradis':
+      return this.generateParadisDate(startDate, endDate);
+
+    default:
+      return this.generateAllDate(startDate, endDate);
+    }
+  }
+
+  generateParadisOrderDate(date) {
+    const orderDate = dayjs(date).utc().unix() + 60 * 60;
+
+    return dayjs.unix(orderDate).utc().format('DD-MM-YYYY');
+  }
+
+  generatePersoliebeOrderDate(date) {
+    const orderDate = dayjs(date).utc().unix() - 8 * 60 * 60;
+
+    return dayjs.unix(orderDate).utc().format('DD-MM-YYYY');
+  }
+
+  genOrderDateFactory(date, app) {
+    switch (app) {
+    case 'Persoliebe':
+      return this.generatePersoliebeOrderDate(date);
+    case 'Paradis':
+      return this.generateParadisOrderDate(date);
+
+    default:
+      return dayjs(date).utc().format('DD-MM-YYYY');
+    }
+  }
+
+  async calculateContributeMargin(startDate, endDate = null, app) {
     try {
+      const { startDay, endDay } = this.dateFactory(startDate, endDate, app);
+      // const faceBookAds = await facebook.getAdsExpense(startDate, endDate);
+      const faceBookAds = {};
+      console.log(faceBookAds);
+
+      // Find orders within the date range
       const orders = await prisma.order.findMany({
         where: {
-          id: {
-            in: ['6292249772163', '6292766392451'],
+          createdAt: {
+            gte: startDay.toDate(),
+            lte: endDay.toDate(),
           },
+          app,
         },
         include: {
           orderLineItems: true,
         },
       });
 
+      console.log(startDay.toDate(), endDay.toDate());
+
+      if (orders.length === 0) {
+        return [];
+      }
+
       console.log(orders);
 
+      // Collect all country-sku combinations
       const countrySku = [];
-
       for (const order of orders) {
         const country = order.shipCountry;
         for (const lineItem of order.orderLineItems) {
@@ -289,42 +383,65 @@ class OrderController {
         }
       }
 
+      // Get base costs for all country-sku combinations
       const bases = await prisma.base.findMany({
         where: {
           OR: countrySku,
         },
       });
 
+      // Create base cost lookup map
       const baseCost = {};
       for (const bs of bases) {
         baseCost[`${bs.sku}_${bs.country}`] = bs.baseCost;
       }
 
-      console.log(baseCost);
+      // Group orders by date and calculate metrics
+      const dailyMetrics = {};
 
-      let revenue = 0;
-      let spend = 0;
-      for (const {
-        orderLineItems: line,
-        shipCountry,
-        id,
-        revenueUSD,
-      } of orders) {
-        revenue += +revenueUSD;
-        for (const item of line) {
-          const itemsBase = baseCost[`${item.sku}_${shipCountry}`] ?? 18.99;
-          console.log(
-            `Order ${id} - Item ${item.sku} - Country ${shipCountry} - Quantity ${item.quantity} - Base ${itemsBase}`,
-          );
+      for (const order of orders) {
+        const orderDate = this.genOrderDateFactory(order.createdAt, app);
 
-          spend += itemsBase * item.quantity;
+        // Initialize daily metrics if not exists
+        if (!dailyMetrics[orderDate]) {
+          dailyMetrics[orderDate] = {
+            date: orderDate,
+            revenue: 0,
+            spend: 0,
+            orders: 0,
+          };
+        }
+
+        // Add revenue for this order
+        dailyMetrics[orderDate].revenue += +order.revenue;
+        dailyMetrics[orderDate].orders += 1;
+
+        // Calculate spend for this order
+        for (const item of order.orderLineItems) {
+          const itemsBase =
+            baseCost[`${item.sku}_${order.shipCountry}`] ?? 18.99;
+          dailyMetrics[orderDate].spend += itemsBase * item.quantity;
         }
       }
-      console.log('revenue', revenue);
-      console.log('spend', spend * 1.15);
-      console.log('net', (revenue = spend * 1.15));
+
+      // Convert to array and apply margin multiplier
+      const result = Object.values(dailyMetrics).map((day) => ({
+        date: day.date,
+        revenue: day.revenue,
+        spend: day.spend,
+        orders: day.orders,
+        ads: faceBookAds[day.date],
+      }));
+
+      // Sort by date
+      result.sort((a, b) =>
+        dayjs(a.date, 'DD-MM-YYYY').diff(dayjs(b.date, 'DD-MM-YYYY').utc()),
+      );
+
+      return { result, orders };
     } catch (error) {
-      console.error(error);
+      console.error('Error calculating contribute margin:', error);
+      throw error;
     }
   }
 }
