@@ -467,7 +467,7 @@ export class OrderRepository {
         for (const item of order.orderLineItems) {
           const itemsBase =
             baseCost[`${item.sku}_${order.shipCountry}`] ??
-            Prisma.Decimal(18.99);
+            Prisma.Decimal(14.99);
           dailyMetrics[orderDate].spend += itemsBase.toNumber() * item.quantity;
         }
       }

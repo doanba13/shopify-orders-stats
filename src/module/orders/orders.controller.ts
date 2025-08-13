@@ -7,7 +7,7 @@ export class OrdersController {
   constructor(private service: OrdersService) {}
 
   @Post()
-  async syncAllShop(@Query('time') time: number) {
+  async syncAllShop() {
     return { data: await this.service.syncAllApp(4) };
   }
 
