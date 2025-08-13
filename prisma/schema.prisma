@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Order {
+  id          String   @id
+  orderId     String   @map("order_id")
+  customerId  String?  @map("customer_id")
+  shipCountry String?  @map("ship_country")
+  revenue     Decimal  @db.Decimal(10, 2)
+  paygateName String?  @map("paygate_name")
+  createdAt   DateTime @map("created_at")
+  cost        Decimal? @db.Decimal(10, 2)
+
+  revenueUSD     Decimal  @db.Decimal(10, 2) @map("revenue_usd")
+  discount       Decimal  @db.Decimal(10, 2)
+  tax       Decimal  @db.Decimal(10, 2)
+  shipped       Decimal  @db.Decimal(10, 2)
+  subTotal       Decimal  @db.Decimal(10, 2) @map("sub_total")
+
+  // Relations
+  customer       Customer?       @relation(fields: [customerId], references: [id])
+  orderLineItems OrderLineItem[]
+  refund         Refund?
+  paygate        Paygate?
+  app         String
+
+  @@map("orders")
+}
+
+model Customer {
+  id              String  @id
+  email           String?
+  fullname        String?
+  country         String?
+  emailSubscribed Boolean @default(false) @map("email_subscribed")
+
+  // Relations
+  orders Order[]
+
+  @@map("customers")
+}
+
+model OrderLineItem {
+  id            String  @id @default(cuid())
+  orderId       String  @map("order_id")
+  itemId        String  @map("item_id")
+  sku           String?
+  quantity      Int
+  price         Decimal @db.Decimal(10, 2)
+  name          String?
+  title         String?
+  giftCard      Boolean @default(false) @map("gift_card")
+  totalDiscount Decimal @default(0) @map("total_discount") @db.Decimal(10, 2)
+  vendorName    String? @map("vendor_name")
+
+  // Relations
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [itemId], references: [id])
+
+  @@map("order_line_items")
+}
+
+model Product {
+  id          String   @id
+  title       String
+  body        String?
+  productType String   @map("product_type")
+  tag         String?
+  updatedAt   DateTime @map("updated_at")
+
+  // Relations
+  variants       ProductVariant[]
+  orderLineItems OrderLineItem[]
+
+  @@map("products")
+}
+
+model ProductVariant {
+  id         String  @id
+  productId  String  @map("product_id")
+  size       String?
+  soldNumber Int     @default(0) @map("sold_number")
+
+  // Relations
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("product_variants")
+}
+
+model Base {
+  id               String  @id @default(cuid())
+  sku              String  @unique
+  country          String
+  baseCost         Decimal @map("base_cost") @db.Decimal(10, 2)
+
+  @@map("bases")
+}
+
+model Refund {
+  id          String   @id
+  orderId     String   @unique @map("order_id")
+  totalRefund Decimal  @map("total_refund") @db.Decimal(10, 2)
+  createdAt   DateTime @map("created_at")
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("refunds")
+}
+
+model Paygate {
+  id      String  @id @default(cuid())
+  orderId String  @unique @map("order_id")
+  name    String
+  fee     Decimal @db.Decimal(10, 2)
+
+  // Relations
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("paygates")
+}
+
+model OrderStats {
+  id                Int      @id @default(autoincrement())
+  date              DateTime @unique
+  totalOrders       Int      @map("total_orders")
+  totalRevenue      Decimal  @map("total_revenue") @db.Decimal(10, 2)
+  averageOrderValue Decimal  @map("average_order_value") @db.Decimal(10, 2)
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("order_stats")
+}
