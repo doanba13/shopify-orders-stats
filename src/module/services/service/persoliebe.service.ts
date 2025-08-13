@@ -16,8 +16,8 @@ export class PersoliebeService implements ShopifyService {
 
   constructor() {
     const acc_id = process.env.FB_ADS_ACC_ID?.split(',');
-    const tk = process.env.FB_TOKEN?.split(',');
+    const tk = process.env.FB_TOKEN;
 
-    this.fb = new FacebookAdsRepository(acc_id![1], tk![1]);
+    this.fb = new FacebookAdsRepository(tk!, acc_id![1]);
   }
 }

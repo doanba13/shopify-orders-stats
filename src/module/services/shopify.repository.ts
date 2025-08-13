@@ -39,7 +39,7 @@ export class ShopifyRepository {
   async getOrders(time = 1) {
     let pageInfo: string = '';
     const result: Order[] = [];
-    const set = new Set<number>();
+    const set = new Set<string>();
 
     try {
       for (const _ of Array(time)

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-/* eslint-disable @typescript-eslint/no-unsafe-call */
+
 import { Injectable } from '@nestjs/common';
 import { ShopifyRegistry } from '../services/shopify.registry';
 import { Order, ShopifyType } from '../services/types';
@@ -35,15 +35,23 @@ function calculatePaymentFee(gatewayName: string, orderTotal: number) {
 
 @Injectable()
 export class OrderRepository {
+  private util = new Util();
+
   constructor(
     private appRegistry: ShopifyRegistry,
     private prisma: PrismaService,
-    private util = new Util(),
   ) {}
 
   async processShopifyOrder(orderData: Order, app: ShopifyType) {
     try {
       // console.log('Processing order:', orderData.id);
+      const order = await this.prisma.client.order.findUnique({
+        where: { id: orderData.id.toString() },
+      });
+
+      if (order) {
+        console.log('Return due to Order already saved!');
+      }
 
       // Use Prisma transaction to ensure data consistency
       await this.prisma.client.$transaction(async (tx) => {
@@ -339,7 +347,7 @@ export class OrderRepository {
     return { startDay, endDay };
   }
 
-  dateFactory(startDate, endDate = null, app) {
+  dateFactory(startDate, endDate, app) {
     console.log('app', app);
     switch (app) {
       case 'Persoliebe':
@@ -378,12 +386,14 @@ export class OrderRepository {
 
   async calculateContributeMargin(
     startDate: number,
-    endDate = null,
+    endDate: number | null,
     app: ShopifyType,
-  ) {
+  ): Promise<{ result: Record<string, any>[]; orders: any[] }> {
     try {
       const repo = this.appRegistry.getApp(app);
       const { startDay, endDay } = this.dateFactory(startDate, endDate, app);
+
+      if (!repo?.fb) return { orders: [], result: [] };
 
       const faceBookAds = await repo?.fb.getAdsExpense(startDate, endDate);
       // const faceBookAds = {};
@@ -405,7 +415,7 @@ export class OrderRepository {
       console.log(startDay.toDate(), endDay.toDate());
 
       if (orders.length === 0) {
-        return [];
+        return { orders: [], result: [] };
       }
 
       console.log(orders);
@@ -456,7 +466,8 @@ export class OrderRepository {
         // Calculate spend for this order
         for (const item of order.orderLineItems) {
           const itemsBase =
-            baseCost[`${item.sku}_${order.shipCountry}`] ?? 18.99;
+            baseCost[`${item.sku}_${order.shipCountry}`] ??
+            Prisma.Decimal(18.99);
           dailyMetrics[orderDate].spend += itemsBase.toNumber() * item.quantity;
         }
       }

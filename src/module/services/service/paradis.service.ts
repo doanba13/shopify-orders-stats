@@ -15,8 +15,8 @@ export class ParadisService implements ShopifyService {
 
   constructor() {
     const acc_id = process.env.FB_ADS_ACC_ID?.split(',');
-    const tk = process.env.FB_TOKEN?.split(',');
-
-    this.fb = new FacebookAdsRepository(acc_id![0], tk![0]);
+    const tk = process.env.FB_TOKEN;
+    console.log(acc_id, tk);
+    this.fb = new FacebookAdsRepository(tk!, acc_id![0]);
   }
 }

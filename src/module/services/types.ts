@@ -14,7 +14,7 @@ export interface OrdersResponse {
 }
 
 export interface Order {
-  id: number;
+  id: string;
   admin_graphql_api_id: string;
   app_id: number | null;
   browser_ip: string | null;

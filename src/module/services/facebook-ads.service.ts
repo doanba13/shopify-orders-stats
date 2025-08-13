@@ -101,7 +101,12 @@ export class FacebookAdsRepository {
       ...fields,
     ];
 
-    const adAccount = new AdAccount(this.adAccountId, this.api);
+    const adAccount = new AdAccount(
+      this.adAccountId,
+      undefined,
+      null,
+      this.api,
+    );
 
     const params = {
       level,
