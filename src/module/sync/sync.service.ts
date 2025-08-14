@@ -35,7 +35,7 @@ export class SyncService {
       if (!row.cost) continue;
 
       await this.prisma.client.base.upsert({
-        where: { sku: row.sku },
+        where: { sku: row.sku, country: row.country },
         update: {
           country: row.country,
           baseCost: row.cost,

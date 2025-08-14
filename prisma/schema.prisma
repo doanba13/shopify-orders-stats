@@ -99,6 +99,7 @@ model Base {
   country          String
   baseCost         Decimal @map("base_cost") @db.Decimal(10, 2)
 
+  @@unique([sku, country])
   @@map("bases")
 }
 
