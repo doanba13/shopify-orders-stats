@@ -4,7 +4,7 @@ import type { ShopifyType } from '../services/types';
 
 @Controller('api/orders')
 export class OrdersController {
-  constructor(private service: OrdersService) {}
+  constructor(private service: OrdersService) { }
 
   @Post()
   async syncAllShop() {
@@ -17,12 +17,10 @@ export class OrdersController {
     @Query('endDate') endDate: number,
     @Query('app') app: ShopifyType,
   ) {
-    const { result, orders } = await this.service.calContributeMargin(
+    return await this.service.calContributeMargin(
       startDate,
       endDate,
       app,
     );
-
-    return { result, orders };
   }
 }

@@ -9,6 +9,7 @@ import {
   AdAccount,
   type FacebookAdsApi as FacebookAdsApiType,
 } from 'facebook-nodejs-business-sdk';
+import { Logger } from '@nestjs/common';
 
 // Extend dayjs with plugins
 dayjs.extend(utc);
@@ -18,6 +19,7 @@ export class FacebookAdsRepository {
   private api: FacebookAdsApiType;
   private adAccountId: string;
   private isInitialized: boolean;
+  private logger = new Logger(FacebookAdsRepository.name);
 
   //   private appId: string;
   //   private appSecret: string;
@@ -40,7 +42,7 @@ export class FacebookAdsRepository {
         : `act_${adAccountId}`;
 
       this.isInitialized = true;
-      console.log(
+      this.logger.log(
         `Facebook Ads API initialized for account: ${this.adAccountId}`,
       );
     } catch (error) {

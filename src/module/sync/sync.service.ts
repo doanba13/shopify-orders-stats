@@ -9,7 +9,7 @@ import { PrismaService } from 'src/prisma.service';
 
 @Injectable()
 export class SyncService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService) { }
 
   async syncFromCsv(): Promise<{ total: number }> {
     const CSV_FILE_PATH = path.join(process.cwd(), 'data', 'base.csv');
@@ -30,24 +30,18 @@ export class SyncService {
         .on('error', reject);
     });
 
-    // Step 2: Upsert each row
-    for (const row of rows) {
-      if (!row.cost) continue;
+    const data = rows.filter((e) => e.sku && e.cost && e.country).map(row => ({
+      sku: row.sku,
+      country: row.country,
+      baseCost: row.cost,
+    }))
 
-      await this.prisma.client.base.upsert({
-        where: { sku: row.sku, country: row.country },
-        update: {
-          country: row.country,
-          baseCost: row.cost,
-        },
-        create: {
-          sku: row.sku,
-          country: row.country,
-          baseCost: row.cost,
-        },
-      });
-    }
+    const result = await this.prisma.client.base.createMany({
+      data,
+      skipDuplicates: true,
+    })
 
-    return { total: rows.length };
+
+    return { total: result.count };
   }
 }

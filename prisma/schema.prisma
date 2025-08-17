@@ -95,7 +95,7 @@ model ProductVariant {
 
 model Base {
   id               String  @id @default(cuid())
-  sku              String  @unique
+  sku              String
   country          String
   baseCost         Decimal @map("base_cost") @db.Decimal(10, 2)
 

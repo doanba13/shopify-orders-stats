@@ -60,8 +60,6 @@ export class OrdersService {
     const results = {};
     let totalOrders: any[] = [];
 
-    console.log('Cal ALL');
-
     for (const app of apps) {
       const { result, orders } =
         await this.orderRepository.calculateContributeMargin(
@@ -73,7 +71,7 @@ export class OrdersService {
       totalOrders = [...totalOrders, ...orders];
 
       for (const stat of result) {
-        if (results[stat.date]) {
+        if (results[stat.date] && result[stat.date as string]) {
           result[stat.date as string].orders += stat.orders;
           result[stat.date as string].revenue += stat.revenue;
           result[stat.date as string].spend += stat.spend;

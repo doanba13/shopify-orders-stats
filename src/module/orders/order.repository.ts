@@ -1,14 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ShopifyRegistry } from '../services/shopify.registry';
 import { Order, ShopifyType } from '../services/types';
 import dayjs from 'dayjs';
 import utc from 'dayjs/plugin/utc';
 import { PrismaService } from 'src/prisma.service';
 import { DefaultArgs } from '@prisma/client/runtime/binary';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, Order as DBOrder } from '@prisma/client';
 import { Util } from './util';
 
 dayjs.extend(utc);
@@ -36,21 +36,22 @@ function calculatePaymentFee(gatewayName: string, orderTotal: number) {
 @Injectable()
 export class OrderRepository {
   private util = new Util();
+  private logger = new Logger(OrderRepository.name);
 
   constructor(
     private appRegistry: ShopifyRegistry,
     private prisma: PrismaService,
-  ) {}
+  ) { }
 
   async processShopifyOrder(orderData: Order, app: ShopifyType) {
     try {
-      // console.log('Processing order:', orderData.id);
       const order = await this.prisma.client.order.findUnique({
         where: { id: orderData.id.toString() },
       });
 
       if (order) {
-        console.log('Return due to Order already saved!');
+        this.logger.log('Return due to Order already saved!');
+        return;
       }
 
       // Use Prisma transaction to ensure data consistency
@@ -68,7 +69,6 @@ export class OrderRepository {
         await this.processPaymentGateway(tx, orderData, order.id);
       });
 
-      // console.log('Order processed successfully:', orderData.id);
       return { success: true };
     } catch (error) {
       console.error('Error processing order:', error);
@@ -87,17 +87,15 @@ export class OrderRepository {
       where: { id: customer.id.toString() },
       update: {
         email: customer.email,
-        fullname: `${customer.first_name || ''} ${
-          customer.last_name || ''
-        }`.trim(),
+        fullname: `${customer.first_name || ''} ${customer.last_name || ''
+          }`.trim(),
         country: orderData.shipping_address?.country_code,
       },
       create: {
         id: customer.id.toString(),
         email: customer.email,
-        fullname: `${customer.first_name || ''} ${
-          customer.last_name || ''
-        }`.trim(),
+        fullname: `${customer.first_name || ''} ${customer.last_name || ''
+          }`.trim(),
         country: orderData.shipping_address?.country_code,
       },
     });
@@ -317,8 +315,6 @@ export class OrderRepository {
     const startDay = dayjs.unix(startUnix).utc();
     const endDay = dayjs.unix(endUnix).utc();
 
-    console.log('hehe', startDay, endDay);
-
     return { startDay, endDay };
   }
 
@@ -348,7 +344,6 @@ export class OrderRepository {
   }
 
   dateFactory(startDate, endDate, app) {
-    console.log('app', app);
     switch (app) {
       case 'Persoliebe':
         return this.generatePersoliebeDate(startDate, endDate);
@@ -388,15 +383,14 @@ export class OrderRepository {
     startDate: number,
     endDate: number | null,
     app: ShopifyType,
-  ): Promise<{ result: Record<string, any>[]; orders: any[] }> {
+  ): Promise<{ result: Record<string, any>[]; orders: any[]; newCustomer: any[] }> {
     try {
       const repo = this.appRegistry.getApp(app);
       const { startDay, endDay } = this.dateFactory(startDate, endDate, app);
 
-      if (!repo?.fb) return { orders: [], result: [] };
+      if (!repo?.fb) return { orders: [], result: [], newCustomer: [] };
 
       const faceBookAds = await repo?.fb.getAdsExpense(startDate, endDate);
-      // const faceBookAds = {};
 
       // Find orders within the date range
       const orders = await this.prisma.client.order.findMany({
@@ -412,13 +406,11 @@ export class OrderRepository {
         },
       });
 
-      console.log(startDay.toDate(), endDay.toDate());
-
       if (orders.length === 0) {
-        return { orders: [], result: [] };
+        return { orders: [], result: [], newCustomer: [] };
       }
 
-      console.log(orders);
+      const newCustomer = await this.findNewCustomer(orders);
 
       // Collect all country-sku combinations
       const countrySku: { sku: string; country: string }[] = [];
@@ -463,13 +455,18 @@ export class OrderRepository {
         dailyMetrics[orderDate].revenue += +order.revenue;
         dailyMetrics[orderDate].orders += 1;
 
+        let base = 0;
+
         // Calculate spend for this order
         for (const item of order.orderLineItems) {
           const itemsBase =
             baseCost[`${item.sku}_${order.shipCountry}`] ??
             Prisma.Decimal(14.99);
           dailyMetrics[orderDate].spend += itemsBase.toNumber() * item.quantity;
+          base += itemsBase.toNumber() * item.quantity;
+
         }
+        order['base'] = base;
       }
 
       // Convert to array and apply margin multiplier
@@ -479,19 +476,39 @@ export class OrderRepository {
           revenue: day.revenue,
           spend: day.spend,
           orders: day.orders,
-          ads: faceBookAds?.[day.date],
+          ads: faceBookAds?.[day.date].spend,
         }),
       );
-
       // Sort by date
       result.sort((a, b) =>
         dayjs(a.date, 'DD-MM-YYYY').diff(dayjs(b.date, 'DD-MM-YYYY').utc()),
       );
 
-      return { result, orders };
+      return { result, orders, newCustomer };
     } catch (error) {
       console.error('Error calculating contribute margin:', error);
       throw error;
     }
+  }
+
+  private async findNewCustomer(orders: DBOrder[]) {
+    const customerIds = orders.filter(e => e.customerId !== null).map(e => e.customerId)
+
+    return await this.prisma.client.order.groupBy({
+      by: ["customerId"],
+      where: {
+        customerId: { in: customerIds as string[] },
+      },
+      _count: {
+        customerId: true,
+      },
+      having: {
+        customerId: {
+          _count: {
+            equals: 1,  // only 1 order
+          },
+        },
+      },
+    });
   }
 }
