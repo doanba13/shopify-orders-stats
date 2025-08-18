@@ -10,7 +10,7 @@ export class OrdersService {
   constructor(
     private appRegistry: ShopifyRegistry,
     private orderRepository: OrderRepository,
-  ) {}
+  ) { }
 
   private logger = new Logger(OrdersService.name);
 
@@ -59,9 +59,10 @@ export class OrdersService {
 
     const results = {};
     let totalOrders: any[] = [];
+    let newCustomer: any[] = [];
 
     for (const app of apps) {
-      const { result, orders } =
+      const { result, orders, newCustomer: nC } =
         await this.orderRepository.calculateContributeMargin(
           startDate,
           endDate,
@@ -69,19 +70,35 @@ export class OrdersService {
         );
 
       totalOrders = [...totalOrders, ...orders];
+      newCustomer = [...newCustomer, ...nC];
 
-      for (const stat of result) {
-        if (results[stat.date] && result[stat.date as string]) {
-          result[stat.date as string].orders += stat.orders;
-          result[stat.date as string].revenue += stat.revenue;
-          result[stat.date as string].spend += stat.spend;
-          result[stat.date as string].ads += stat.ads;
+      for (const key in result) {
+        if (Object.prototype.hasOwnProperty.call(result, key)) {
+          const stat = result[key];
+          
+          if (results[key]) {
+            results[key as string].orders += stat?.orders || 0;
+            results[key as string].revenue += stat?.revenue || 0;
+            results[key as string].spend += stat?.spend || 0;
+            results[key as string].ads += stat?.ads || 0;
         } else {
-          results[stat.date] = stat;
+          results[key] = stat;
+        }
         }
       }
+
+      // for (const stat of Obj) {
+      //   if (results[stat.date]) {
+      //       results[stat.date as string].orders += stat?.orders || 0;
+      //       results[stat.date as string].revenue += stat?.revenue || 0;
+      //       results[stat.date as string].spend += stat?.spend || 0;
+      //       results[stat.date as string].ads += stat?.ads || 0;
+      //   } else {
+      //     results[stat.date] = stat;
+      //   }
+      // }
     }
 
-    return { result: results, orders: totalOrders };
+    return { result: results, orders: totalOrders, newCustomer };
   }
 }

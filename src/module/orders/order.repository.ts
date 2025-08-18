@@ -383,14 +383,31 @@ export class OrderRepository {
     startDate: number,
     endDate: number | null,
     app: ShopifyType,
-  ): Promise<{ result: Record<string, any>[]; orders: any[]; newCustomer: any[] }> {
+  ): Promise<{ result: Record<string, any>; orders: any[]; newCustomer: any[] }> {
     try {
       const repo = this.appRegistry.getApp(app);
+      this.logger.log(`Calculate Contribution Margin of: ${app}`)
+
       const { startDay, endDay } = this.dateFactory(startDate, endDate, app);
 
       if (!repo?.fb) return { orders: [], result: [], newCustomer: [] };
 
       const faceBookAds = await repo?.fb.getAdsExpense(startDate, endDate);
+      const dailyMetrics = {};
+      for (const key in faceBookAds) {
+        if (Object.prototype.hasOwnProperty.call(faceBookAds, key)) {
+          dailyMetrics[key] = {
+            ads: faceBookAds[key].spend,
+            date: key,
+            revenue: 0,
+            spend: 0,
+            orders: 0,
+            newRevenue: 0,
+            newOrder: 0,
+            newSpend: 0,
+          }
+        }
+      }
 
       // Find orders within the date range
       const orders = await this.prisma.client.order.findMany({
@@ -404,13 +421,18 @@ export class OrderRepository {
         include: {
           orderLineItems: true,
         },
+        orderBy: {
+          createdAt: "asc",
+        }
       });
 
       if (orders.length === 0) {
-        return { orders: [], result: [], newCustomer: [] };
+        this.logger.log(`These are no orders of: ${app}`)
+        return { orders: [], result: dailyMetrics, newCustomer: [] };
       }
 
       const newCustomer = await this.findNewCustomer(orders);
+      const _newCustomer = new Set(newCustomer.map(e => e.id));
 
       // Collect all country-sku combinations
       const countrySku: { sku: string; country: string }[] = [];
@@ -435,9 +457,6 @@ export class OrderRepository {
         baseCost[`${bs.sku}_${bs.country}`] = bs.baseCost;
       }
 
-      // Group orders by date and calculate metrics
-      const dailyMetrics = {};
-
       for (const order of orders) {
         const orderDate = this.genOrderDateFactory(order.createdAt, app);
 
@@ -448,12 +467,16 @@ export class OrderRepository {
             revenue: 0,
             spend: 0,
             orders: 0,
+            newOrder: 0,
+            newRevenue: 0,
           };
         }
 
         // Add revenue for this order
         dailyMetrics[orderDate].revenue += +order.revenue;
         dailyMetrics[orderDate].orders += 1;
+
+        
 
         let base = 0;
 
@@ -462,39 +485,40 @@ export class OrderRepository {
           const itemsBase =
             baseCost[`${item.sku}_${order.shipCountry}`] ??
             Prisma.Decimal(14.99);
+
           dailyMetrics[orderDate].spend += itemsBase.toNumber() * item.quantity;
           base += itemsBase.toNumber() * item.quantity;
-
+          item['cost'] = itemsBase.toNumber() * item.quantity;
         }
-        order['base'] = base;
+        const shipDiscount = this.calcShipDiscount(order.orderLineItems.length)
+
+        order['base'] = base - shipDiscount;
+        order['shipDiscount'] = shipDiscount;
+        dailyMetrics[orderDate].spend -= shipDiscount;
+
+        if (order.customerId && _newCustomer.has(order.customerId)) {
+          dailyMetrics[orderDate].newOrder += 1;
+          dailyMetrics[orderDate].newRevenue += +order.revenue;
+          dailyMetrics[orderDate].newSpend += base - shipDiscount;
+        }
       }
 
-      // Convert to array and apply margin multiplier
-      const result: Record<string, any>[] = Object.values(dailyMetrics).map(
-        (day: Record<string, any>) => ({
-          date: day.date,
-          revenue: day.revenue,
-          spend: day.spend,
-          orders: day.orders,
-          ads: faceBookAds?.[day.date].spend,
-        }),
-      );
-      // Sort by date
-      result.sort((a, b) =>
-        dayjs(a.date, 'DD-MM-YYYY').diff(dayjs(b.date, 'DD-MM-YYYY').utc()),
-      );
-
-      return { result, orders, newCustomer };
+      return { result: dailyMetrics, orders, newCustomer };
     } catch (error) {
       console.error('Error calculating contribute margin:', error);
       throw error;
     }
   }
 
+  private calcShipDiscount(count: number) {
+    if (count < 1) return 0;
+    return 2.5 * (count - 1)
+  }
+
   private async findNewCustomer(orders: DBOrder[]) {
     const customerIds = orders.filter(e => e.customerId !== null).map(e => e.customerId)
 
-    return await this.prisma.client.order.groupBy({
+    const grouped = await this.prisma.client.order.groupBy({
       by: ["customerId"],
       where: {
         customerId: { in: customerIds as string[] },
@@ -504,11 +528,17 @@ export class OrderRepository {
       },
       having: {
         customerId: {
-          _count: {
-            equals: 1,  // only 1 order
-          },
+          _count: { equals: 1 },
         },
       },
+    });
+
+    const newCustomerIds = grouped.map(g => g.customerId);
+
+    return await this.prisma.client.customer.findMany({
+      where: {
+        id: { in: newCustomerIds as string[] },
+      }
     });
   }
 }

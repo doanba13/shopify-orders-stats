@@ -8,7 +8,7 @@ export class OrdersController {
 
   @Post()
   async syncAllShop() {
-    return { data: await this.service.syncAllApp(4) };
+    return { data: await this.service.syncAllApp(1) };
   }
 
   @Get('contribute-margin')
