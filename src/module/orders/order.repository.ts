@@ -10,8 +10,10 @@ import { PrismaService } from 'src/prisma.service';
 import { DefaultArgs } from '@prisma/client/runtime/binary';
 import { Prisma, PrismaClient, Order as DBOrder } from '@prisma/client';
 import { Util } from './util';
+import timezone from "dayjs/plugin/timezone";
 
 dayjs.extend(utc);
+dayjs.extend(timezone);
 
 type TX = Omit<
   PrismaClient<Prisma.PrismaClientOptions, never, DefaultArgs>,
@@ -302,46 +304,39 @@ export class OrderRepository {
     };
   }
 
-  // +1
-  generateParadisDate(startDate, endDate = null) {
-    const startUnix =
-      dayjs.unix(startDate).utc().startOf('day').unix() - 60 * 60;
-    const endUnix =
-      (endDate
-        ? dayjs.unix(endDate).utc().endOf('day').unix()
-        : dayjs.unix(startDate).utc().endOf('day').unix()) -
-      60 * 60;
+  generateParadisDate(startDate: number, endDate?: number) {
+    const zone = "Europe/Amsterdam"; // Paradis timezone
 
-    const startDay = dayjs.unix(startUnix).utc();
-    const endDay = dayjs.unix(endUnix).utc();
+    const startDay = dayjs.unix(startDate).tz(zone).startOf("day");
+    const endDay = (endDate
+      ? dayjs.unix(endDate).tz(zone).endOf("day")
+      : dayjs.unix(startDate).tz(zone).endOf("day"));
 
     return { startDay, endDay };
   }
 
-  // -8
-  generatePersoliebeDate(startDate, endDate = null) {
-    const startUnix =
-      dayjs.unix(startDate).utc().startOf('day').unix() + 8 * 60 * 60;
-    const endUnix =
-      (endDate
-        ? dayjs.unix(endDate).utc().endOf('day').unix()
-        : dayjs.unix(startDate).utc().endOf('day').unix()) +
-      8 * 60 * 60;
+  generatePersoliebeDate(startDate: number, endDate?: number) {
+    const zone = "Etc/GMT+8"; // Persoliebe timezone (UTC-8)
 
-    const startDay = dayjs.unix(startUnix).utc();
-    const endDay = dayjs.unix(endUnix).utc();
+    const startDay = dayjs.unix(startDate).tz(zone).startOf("day");
+    const endDay = (endDate
+      ? dayjs.unix(endDate).tz(zone).endOf("day")
+      : dayjs.unix(startDate).tz(zone).endOf("day"));
 
     return { startDay, endDay };
   }
 
-  generateAllDate(startDate, endDate) {
-    const startDay = dayjs.unix(startDate).utc().startOf('day');
-    const endDay = endDate
-      ? dayjs.unix(endDate).utc().endOf('day')
-      : dayjs.unix(startDate).utc().endOf('day');
+  generateAllDate(startDate: number, endDate?: number) {
+    const zone = "UTC"; // default UTC
+
+    const startDay = dayjs.unix(startDate).tz(zone).startOf("day");
+    const endDay = (endDate
+      ? dayjs.unix(endDate).tz(zone).endOf("day")
+      : dayjs.unix(startDate).tz(zone).endOf("day"));
 
     return { startDay, endDay };
   }
+
 
   dateFactory(startDate, endDate, app) {
     switch (app) {
@@ -355,29 +350,17 @@ export class OrderRepository {
     }
   }
 
-  generateParadisOrderDate(date) {
-    const orderDate = dayjs(date).utc().unix() + 60 * 60;
+  genOrderDateFactory(date: string, app: string) {
+    const zones: Record<string, string> = {
+      Persoliebe: "Etc/GMT+8",       // UTC-8
+      Paradis: "Europe/Amsterdam",   // Dutch timezone (+1/+2 DST)
+    };
 
-    return dayjs.unix(orderDate).utc().format('DD-MM-YYYY');
+    const zone = zones[app] || "UTC";
+
+    return dayjs(date).tz(zone).format("DD-MM-YYYY");
   }
 
-  generatePersoliebeOrderDate(date) {
-    const orderDate = dayjs(date).utc().unix() - 8 * 60 * 60;
-
-    return dayjs.unix(orderDate).utc().format('DD-MM-YYYY');
-  }
-
-  genOrderDateFactory(date, app) {
-    switch (app) {
-      case 'Persoliebe':
-        return this.generatePersoliebeOrderDate(date);
-      case 'Paradis':
-        return this.generateParadisOrderDate(date);
-
-      default:
-        return dayjs(date).utc().format('DD-MM-YYYY');
-    }
-  }
 
   async calculateContributeMargin(
     startDate: number,
@@ -458,7 +441,7 @@ export class OrderRepository {
       }
 
       for (const order of orders) {
-        const orderDate = this.genOrderDateFactory(order.createdAt, app);
+        const orderDate = this.genOrderDateFactory(order.createdAt.toISOString(), app);
 
         // Initialize daily metrics if not exists
         if (!dailyMetrics[orderDate]) {
@@ -476,7 +459,7 @@ export class OrderRepository {
         dailyMetrics[orderDate].revenue += +order.revenue;
         dailyMetrics[orderDate].orders += 1;
 
-        
+
 
         let base = 0;
 
