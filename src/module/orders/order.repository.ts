@@ -470,7 +470,7 @@ export class OrderRepository {
           base += itemsBase.toNumber() * item.quantity;
           item['cost'] = itemsBase.toNumber() * item.quantity;
         }
-        const shipDiscount = this.calcShipDiscount(order.orderLineItems.length)
+        const shipDiscount = this.calcShipDiscount(order.orderLineItems)
 
         order['base'] = base - shipDiscount;
         order['shipDiscount'] = shipDiscount;
@@ -490,7 +490,8 @@ export class OrderRepository {
     }
   }
 
-  private calcShipDiscount(count: number) {
+  private calcShipDiscount(items: { quantity: number }[]) {
+    const count = items.reduce((p, c) => p + c.quantity, 0);
     if (count < 1) return 0;
     return 2.5 * (count - 1)
   }
