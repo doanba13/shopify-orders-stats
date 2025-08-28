@@ -86,17 +86,6 @@ export class OrdersService {
         }
         }
       }
-
-      // for (const stat of Obj) {
-      //   if (results[stat.date]) {
-      //       results[stat.date as string].orders += stat?.orders || 0;
-      //       results[stat.date as string].revenue += stat?.revenue || 0;
-      //       results[stat.date as string].spend += stat?.spend || 0;
-      //       results[stat.date as string].ads += stat?.ads || 0;
-      //   } else {
-      //     results[stat.date] = stat;
-      //   }
-      // }
     }
 
     return { result: results, orders: totalOrders, newCustomer };

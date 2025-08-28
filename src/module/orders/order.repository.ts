@@ -304,47 +304,41 @@ export class OrderRepository {
     };
   }
 
+  generateZoneDates(startDate: number, endDate?: number, zone = "UTC") {
+    // interpret timestamp as a local calendar day, not as an instant
+    const startStr = dayjs.unix(startDate).utc().format("YYYY-MM-DD");
+    const endStr = endDate
+      ? dayjs.unix(endDate).utc().format("YYYY-MM-DD")
+      : startStr;
+
+    const startLocal = dayjs.tz(startStr, "YYYY-MM-DD", zone).startOf("day");
+    const endLocal = dayjs.tz(endStr, "YYYY-MM-DD", zone).endOf("day").millisecond(0);
+
+    return {
+      startUTC: startLocal.utc().toDate(),
+      endUTC: endLocal.utc().toDate(),
+    };
+  }
+
+
+
+  // your app-specific wrappers
   generateParadisDate(startDate: number, endDate?: number) {
-    const zone = "Europe/Amsterdam"; // Paradis timezone
-
-    const startDay = dayjs.unix(startDate).tz(zone).startOf("day");
-    const endDay = (endDate
-      ? dayjs.unix(endDate).tz(zone).endOf("day")
-      : dayjs.unix(startDate).tz(zone).endOf("day"));
-
-    return { startDay, endDay };
+    return this.generateZoneDates(startDate, endDate, "Europe/Amsterdam");
   }
-
   generatePersoliebeDate(startDate: number, endDate?: number) {
-    const zone = "Etc/GMT+8"; // Persoliebe timezone (UTC-8)
-
-    const startDay = dayjs.unix(startDate).tz(zone).startOf("day");
-    const endDay = (endDate
-      ? dayjs.unix(endDate).tz(zone).endOf("day")
-      : dayjs.unix(startDate).tz(zone).endOf("day"));
-
-    return { startDay, endDay };
+    return this.generateZoneDates(startDate, endDate, "Pacific/Pitcairn"); // UTC-8
   }
-
   generateAllDate(startDate: number, endDate?: number) {
-    const zone = "UTC"; // default UTC
-
-    const startDay = dayjs.unix(startDate).tz(zone).startOf("day");
-    const endDay = (endDate
-      ? dayjs.unix(endDate).tz(zone).endOf("day")
-      : dayjs.unix(startDate).tz(zone).endOf("day"));
-
-    return { startDay, endDay };
+    return this.generateZoneDates(startDate, endDate, "UTC");
   }
 
-
-  dateFactory(startDate, endDate, app) {
+  dateFactory(startDate: number, endDate?: number, app?: string) {
     switch (app) {
-      case 'Persoliebe':
+      case "Persoliebe":
         return this.generatePersoliebeDate(startDate, endDate);
-      case 'Paradis':
+      case "Paradis":
         return this.generateParadisDate(startDate, endDate);
-
       default:
         return this.generateAllDate(startDate, endDate);
     }
@@ -352,13 +346,13 @@ export class OrderRepository {
 
   genOrderDateFactory(date: string, app: string) {
     const zones: Record<string, string> = {
-      Persoliebe: "Etc/GMT+8",       // UTC-8
+      Persoliebe: "Pacific/Pitcairn",       // UTC-8
       Paradis: "Europe/Amsterdam",   // Dutch timezone (+1/+2 DST)
     };
 
     const zone = zones[app] || "UTC";
 
-    return dayjs(date).tz(zone).format("DD-MM-YYYY");
+    return dayjs.utc(date).tz(zone).format("DD-MM-YYYY");
   }
 
 
@@ -371,7 +365,10 @@ export class OrderRepository {
       const repo = this.appRegistry.getApp(app);
       this.logger.log(`Calculate Contribution Margin of: ${app}`)
 
-      const { startDay, endDay } = this.dateFactory(startDate, endDate, app);
+      const { startUTC: startDay, endUTC: endDay } = this.dateFactory(startDate, endDate || undefined, app);
+
+
+      this.logger.log(startDate, endDate || undefined, dayjs.unix(startDate).toDate(), startDay, endDay)
 
       if (!repo?.fb) return { orders: [], result: [], newCustomer: [] };
 
@@ -396,8 +393,8 @@ export class OrderRepository {
       const orders = await this.prisma.client.order.findMany({
         where: {
           createdAt: {
-            gte: startDay.toDate(),
-            lte: endDay.toDate(),
+            gte: startDay,
+            lte: endDay,
           },
           app,
         },
