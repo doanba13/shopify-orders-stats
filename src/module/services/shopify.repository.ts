@@ -46,10 +46,9 @@ export class ShopifyRepository {
         .fill(null)
         .map((_, i) => i)) {
         const response = await this.api.get<OrdersResponse>(
-          `/orders.json?limit=250&${
-            pageInfo
-              ? pageInfo
-              : 'status=any&fulfillment_status=any&financial_status=any'
+          `/orders.json?limit=250&${pageInfo
+            ? pageInfo
+            : 'status=any&fulfillment_status=any&financial_status=any'
           }`,
         );
 
@@ -82,6 +81,45 @@ export class ShopifyRepository {
       throw error;
     }
   }
+
+  /**
+ * Fetch all Shopify orders by batching with date ranges.
+ * 
+ * @param {string} startDate - ISO8601 start date (e.g., "2025-01-01T00:00:00Z")
+ * @param {string} endDate - ISO8601 end date (e.g., "2025-02-01T00:00:00Z")
+ * @returns {Promise<Array>} - all orders between the dates
+ */
+  async fetchOrdersByDateRange(startDate: string, endDate: string) {
+    let orders = [];
+    let page = 1;
+    let hasMore = true;
+
+    while (hasMore) {
+      const url = `/orders.json`;
+      const params = {
+        status: "any",
+        created_at_min: startDate,
+        created_at_max: endDate,
+        limit: 250,
+      };
+
+      const response = await this.api.get(url, {
+        params,
+      });
+
+      const batch = response.data.orders;
+      orders = orders.concat(batch);
+
+      if (batch.length < 250) {
+        hasMore = false;
+      } else {
+        page += 1;
+      }
+    }
+
+    return orders;
+  }
+
   async getVariantById(id: number) {
     const _v = this.variant.get(id);
     if (_v) return _v;

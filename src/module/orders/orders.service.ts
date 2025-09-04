@@ -4,6 +4,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ShopifyRegistry } from '../services/shopify.registry';
 import { OrderRepository } from './order.repository';
 import { ShopifyService, ShopifyType } from '../services/types';
+import dayjs from 'dayjs';
 
 @Injectable()
 export class OrdersService {
@@ -32,6 +33,37 @@ export class OrdersService {
         await this.orderRepository.processShopifyOrder(o, app);
       }
     }
+  }
+
+  async syncOldParadis(globalStart: string, globalEnd: string) {
+    const app = this.appRegistry.getApp("Paradis");
+    if (!app?.repo) return;
+
+    let results = 0;
+    let cursor = dayjs(globalStart);
+
+    while (cursor.isBefore(globalEnd)) {
+      const nextCursor = cursor.add(1, "day"); // adjust to week/month if needed
+      const batchOrders = await app.repo.fetchOrdersByDateRange(
+        cursor.toISOString(),
+        nextCursor.toISOString()
+      );
+
+      this.logger.log(
+        `Fetched ${batchOrders.length} orders from ${cursor.format(
+          "YYYY-MM-DD"
+        )}`
+      );
+
+      for (const o of batchOrders) {
+        await this.orderRepository.processShopifyOrder(o, 'Paradis');
+      }
+
+      results += batchOrders.length;
+      cursor = nextCursor;
+    }
+
+    return 'Successfully processed ' + results + ' orders';
   }
 
   async calContributeMargin(
@@ -75,15 +107,15 @@ export class OrdersService {
       for (const key in result) {
         if (Object.prototype.hasOwnProperty.call(result, key)) {
           const stat = result[key];
-          
+
           if (results[key]) {
             results[key as string].orders += stat?.orders || 0;
             results[key as string].revenue += stat?.revenue || 0;
             results[key as string].spend += stat?.spend || 0;
             results[key as string].ads += stat?.ads || 0;
-        } else {
-          results[key] = stat;
-        }
+          } else {
+            results[key] = stat;
+          }
         }
       }
     }

@@ -449,6 +449,8 @@ export class OrderRepository {
             orders: 0,
             newOrder: 0,
             newRevenue: 0,
+            newSpend: 0,
+            ads: 0,
           };
         }
 
@@ -483,7 +485,15 @@ export class OrderRepository {
         }
       }
 
-      return { result: dailyMetrics, orders, newCustomer };
+      const sortedDailyMetrics = Object.fromEntries(
+        Object.entries(dailyMetrics).sort(([a], [b]) => {
+          const tsA = dayjs(a, "DD-MM-YYYY").valueOf(); // timestamp (ms)
+          const tsB = dayjs(b, "DD-MM-YYYY").valueOf();
+          return tsA - tsB;
+        })
+      );
+
+      return { result: sortedDailyMetrics, orders, newCustomer };
     } catch (error) {
       console.error('Error calculating contribute margin:', error);
       throw error;

@@ -11,6 +11,15 @@ export class OrdersController {
     return { data: await this.service.syncAllApp(1) };
   }
 
+  @Get('/sync-paradis')
+  async syncParadis(
+    @Query('startDate') startDate: string,
+    @Query('endDate') endDate: string,
+  ) {
+    return { message: await this.service.syncOldParadis("2024-12-01", "2025-01-01") };
+  }
+
+
   @Get('contribute-margin')
   async calculateContributeMargin(
     @Query('startDate') startDate: number,
